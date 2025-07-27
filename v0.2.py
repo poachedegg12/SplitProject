@@ -470,7 +470,7 @@ class ModLoader(tk.Frame):
         # ────────────────
         self.current_page = 0
         self.mods_per_page = 6
-        self.thumbnail_size = (400, 250)
+        self.thumbnail_size = (340, 180)
         self.mods_path = os.path.join(current_dir, "mods")
         self.mod_data = self.load_mods()
 
@@ -506,6 +506,15 @@ class ModLoader(tk.Frame):
         self.button_frame = tk.Frame(self, bg="white")
         self.button_frame.place(relx=0.5, rely=0.5, anchor="center")
 
+
+        refresh_btn = tk.Button(
+            self,
+            text="Refresh",
+            font=("Arial", 20),
+            command=self.refresh_mods
+        )
+        refresh_btn.place(x=980, y=28)  # Adjust the x/y as needed
+
         # ────────────────
         # Navigation Arrows
         # ────────────────
@@ -528,6 +537,12 @@ class ModLoader(tk.Frame):
         # ────────────────
         # Load First Page
         # ────────────────
+        self.display_mods()
+
+    def refresh_mods(self):
+        """Reload mod data from disk and refresh the displayed mods."""
+        self.mod_data = self.load_mods()
+        self.current_page = 0  # Reset to first page
         self.display_mods()
 
     def load_mods(self):
@@ -561,7 +576,6 @@ class ModLoader(tk.Frame):
             mod_info = {
                 "name": "Unknown Mod",
                 "description": "",
-                "video_link": "",
                 "author": "",
                 "date_made": "",
                 "version": "",
@@ -585,7 +599,6 @@ class ModLoader(tk.Frame):
                     mod_info.update({
                         "name": get("name", "Unknown Mod"),
                         "description": get("description"),
-                        "video_link": get("video_link"),
                         "author": get("author"),
                         "date_made": get("date_made"),
                         "version": get("version"),
@@ -599,10 +612,18 @@ class ModLoader(tk.Frame):
             # Load thumbnail image
             if os.path.exists(image_path):
                 try:
-                    img = Image.open(image_path).resize(self.thumbnail_size, Image.LANCZOS)
-                    mod_info["image"] = ImageTk.PhotoImage(img)
+                    original = Image.open(image_path)
+                    resized = original.resize(self.thumbnail_size, Image.LANCZOS)
+                    mod_info["image"] = ImageTk.PhotoImage(resized)
+                    mod_info["image_original"] = original  # <── store original image for resizing later
                 except Exception:
-                    pass  # Silently skip bad images
+                    pass
+
+            else:
+                original = (Image.open(os.path.join(current_dir, "Assets/default.png")))
+                resized = original.resize(self.thumbnail_size, Image.LANCZOS)
+                mod_info["image"] = ImageTk.PhotoImage(resized)
+                mod_info["image_original"] = original
 
             mods.append(mod_info)
 
@@ -610,33 +631,41 @@ class ModLoader(tk.Frame):
 
     def display_mods(self):
         """
-        Clears the current mod grid and displays mods for the current page.
+        Clears the current mod grid and displays mods for the current page,
+        with tighter layout and less whitespace.
         """
         # Clear old buttons
         for widget in self.button_frame.winfo_children():
             widget.destroy()
 
-        self.button_frame.config(width=800, height=500)
-        self.button_frame.pack_propagate(False)
+        self.button_frame.config(bg=self["bg"])
+
 
         # Get mods for current page
         start = self.current_page * self.mods_per_page
         end = start + self.mods_per_page
         current_mods = self.mod_data[start:end]
 
+        # Layout settings
+        max_cols = 3
+        button_width = 360
+        button_height = 240
+        padx = 0  # No horizontal padding
+        pady = 0  # No vertical padding
+
         for idx, mod in enumerate(current_mods):
-            row = idx // 3
-            col = idx % 3
+            row = idx // max_cols
+            col = idx % max_cols
 
             wrapper = tk.Frame(
                 self.button_frame,
-                width=490,
-                height=480,
+                width=button_width,
+                height=button_height,
                 bg=self["bg"],
                 highlightthickness=0,
                 bd=0
             )
-            wrapper.grid(row=row, column=col, padx=20, pady=20)
+            wrapper.grid(row=row, column=col)
             wrapper.grid_propagate(False)
 
             def button_command(selected_mod):
@@ -646,19 +675,19 @@ class ModLoader(tk.Frame):
             btn = tk.Button(
                 wrapper,
                 text=mod["name"],
-                font=("Arial", 24, "bold"),
+                font=("Arial", 12, "bold"),
                 image=mod["image"],
                 compound="top",
-                wraplength=480,
-                relief="raised",
+                wraplength=button_width - 10,
+                relief="flat",
                 bd=0,
                 bg=wrapper["bg"],
                 activebackground=wrapper["bg"],
                 command=partial(button_command, mod)
             )
-            btn.pack(fill="both", expand=True)
+            btn.pack(fill="both", expand=True, padx=0, pady=0)
 
-        # Update nav arrows
+        # Navigation arrows
         self.prev_btn.config(state="normal" if self.current_page > 0 else "disabled")
 
         total_pages = len(self.mod_data) // self.mods_per_page
@@ -683,6 +712,8 @@ class ModPage(tk.Frame):
         super().__init__(parent, bg="white")
         self.controller = controller
 
+        self.image_size = (640, 250)  # Width, Height — adjust as needed
+
         # ────────────────
         # Title Label
         # ────────────────
@@ -701,7 +732,7 @@ class ModPage(tk.Frame):
         # Description Text + Scrollbar
         # ────────────────
         self.scrollbar = Scrollbar(self)
-        self.scrollbar.place(x=650, y=255, height=440)
+        self.scrollbar.place(x=670, y=355, height=340)
 
         self.desc = Text(
             self,
@@ -713,8 +744,25 @@ class ModPage(tk.Frame):
             wrap="word",
             yscrollcommand=self.scrollbar.set
         )
-        self.desc.place(x=20, y=250, width=650, height=450)
+
+        self.desc.place(x=20, y=350, width=650, height=350)
         self.scrollbar.config(command=self.desc.yview)
+
+        self.image = tk.Label(self,
+                              padx=15,
+                              pady=15)
+        self.image.place(x=20, y=75)
+
+        self.info_label = tk.Label(
+            self,
+            text="",
+            font=("Arial", 16),
+            fg="black",
+            bg="white",
+            justify="left",
+            anchor="nw"
+        )
+        self.info_label.place(x=700, y=350)
 
         # ────────────────
         # Patch Button
@@ -725,7 +773,7 @@ class ModPage(tk.Frame):
             font=("Arial", 35, "bold"),
             command=self.patch_mod
         )
-        self.patch_btn.place(x=1000, y=600)
+        self.patch_btn.place(x=850, y=600)
 
         # ────────────────
         # Navigation Buttons
@@ -772,6 +820,24 @@ class ModPage(tk.Frame):
         self.title_label.config(text=mod["name"])
         self.desc.delete("1.0", tk.END)
         self.desc.insert("1.0", mod["description"])
+
+        # Resize mod image to fit nicely
+        original_img = mod.get("image_original")  # Save original in ModLoader
+        if original_img:
+            resized = original_img.copy().resize(self.image_size, Image.LANCZOS)
+            self.mod_img_resized = ImageTk.PhotoImage(resized)
+            self.image.config(image=self.mod_img_resized)
+        else:
+            self.image.config(image="")
+
+        mod = self.controller.selected_mod
+        info_text = f"""Author: {mod.get("author", "")}
+        Date Created: {mod.get("date_made", "")}
+        Downloads: {mod.get("download_count", 0)}
+        Likes: {mod.get("like_count", 0)}
+        Link: {mod.get("link", "")}"""
+
+        self.info_label.config(text=info_text)
 
     def patch_mod(self):
         """Applies xdelta patches and assets from the selected mod."""
@@ -1298,3 +1364,4 @@ if __name__ == "__main__":
         app.deiconify()
     ))
     app.mainloop()
+
