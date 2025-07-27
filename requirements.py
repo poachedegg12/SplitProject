@@ -9,7 +9,8 @@ packages = [
     "simpleaudio",
     "Pillow",
     "beautifulsoup4",
-    "pybanana"
+    "pybanana",
+    "selenium"
 ]
 
 for package in packages:
