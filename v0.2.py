@@ -55,6 +55,12 @@ api = PyBanana()
 # ────────────────
 TIMEOUT_DELAY = 3
 
+def make_mod_folder():
+    if not os.path.isdir(os.path.join(current_dir, "mods")):
+        os.mkdir(os.path.join(current_dir, "mods"))
+
+make_mod_folder()
+
 
 class LoadingScreen(tk.Toplevel):
     def __init__(self, master, total_steps):
@@ -792,7 +798,7 @@ class ModPage(tk.Frame):
             font=("Arial", 20),
             command=self.open_mod_folder
         )
-        self.browser_btn.place(x=1150, y=520)
+        self.browser_btn.place(x=950, y=20)
 
     def open_mod_folder(self):
         """Opens the selected mod folder in the system's file explorer."""
