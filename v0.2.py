@@ -50,6 +50,17 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 context = ssl.create_default_context(cafile=certifi.where())
 api = PyBanana()
 
+global script_dir
+script_dir = os.path.dirname(os.path.abspath(__file__))
+global split_ini_path
+split_ini_path = os.path.join(script_dir, "split.ini")
+
+config = configparser.ConfigParser()
+config.optionxform = str
+config.read(split_ini_path)
+global bg_enabled
+bg_enabled = config.get("Toggles", "bg_enabled")
+
 # ────────────────
 # Utility Functions
 # ────────────────
@@ -349,27 +360,30 @@ def add_scrolling_background(parent_frame, image_path, canvas_size=(1280, 720), 
 
 class MainPage(tk.Frame):
     def __init__(self, parent, controller):
-        super().__init__(parent, bg="grey")
+        super().__init__(parent)
         self.controller = controller
 
-        # ────────────────────────────
-        # Title Label
-        # ────────────────────────────
-        title_label = tk.Label(
+        # Create widgets first
+        self.create_widgets()
+
+        # Load background after widgets exist
+        self.load_background()
+
+    def create_widgets(self):
+        # Title label (keep as attribute for lowering canvas)
+        self.title_label = tk.Label(
             self,
             text="Split Modding Program",
             font=("Arial", 35, "bold"),
             anchor="nw",
             fg="black",
-            bg="grey",
+            bg="white",
             padx=15,
             pady=15
         )
-        title_label.place(x=0, y=0)
+        self.title_label.place(x=0, y=0)
 
-        # ────────────────────────────
-        # Load Banner Images
-        # ────────────────────────────
+        # Load banner images
         self.loader_img = create_faded_image(os.path.join(current_dir, "assets", "examplebanner.jpg"))
         self.browser_img = create_faded_image(os.path.join(current_dir, "assets", "banner_dummy.png"))
         self.settings_img = create_faded_image(
@@ -377,9 +391,6 @@ class MainPage(tk.Frame):
             size=(300, 400)
         )
 
-        # ────────────────────────────
-        # Button Style Defaults
-        # ────────────────────────────
         button_font = ("Arial", 20, "bold")
         button_opts = {
             "font": button_font,
@@ -388,49 +399,37 @@ class MainPage(tk.Frame):
             "highlightthickness": 0
         }
 
-        # ────────────────────────────
-        # Mod Loader Button
-        # ────────────────────────────
+        # Buttons
         button_loader = tk.Button(
             self,
             image=self.loader_img,
             text="Mod Loader",
-            command=lambda: controller.show_frame("ModLoader"),
+            command=lambda: self.controller.show_frame("ModLoader"),
             **button_opts
         )
         button_loader.place(x=20, y=100)
 
-        # ────────────────────────────
-        # Mod Browser Button
-        # ────────────────────────────
         button_browser = tk.Button(
             self,
             image=self.browser_img,
             text="Mod Browser",
-            # command=lambda: controller.show_frame("ModBrowser")
-            command=lambda: messagebox.showinfo(message="This feature has not yet been implemented."),
+            command=lambda: tk.messagebox.showinfo(message="This feature has not yet been implemented."),
             **button_opts
         )
         button_browser.place(x=20, y=400)
 
-        # ────────────────────────────
-        # Settings Button
-        # ────────────────────────────
         button_settings = tk.Button(
             self,
             image=self.settings_img,
             text="Settings",
-            command=lambda: controller.show_frame("Settings"),
+            command=lambda: self.controller.show_frame("Settings"),
             **button_opts
         )
         button_settings.place(x=900, y=100)
 
-        # ────────────────────────────
-        # Sound Buttons with Custom Handlers
-        # ────────────────────────────
+        # Sound and switch handler
         def play_sound_and_switch(frame_name, sound_file):
-            """Helper to switch frame and play associated sound."""
-            controller.show_frame(frame_name)
+            self.controller.show_frame(frame_name)
             wave_path = os.path.join(current_dir, f"Assets/{sound_file}")
             try:
                 wave_obj = sa.WaveObject.from_wave_file(wave_path)
@@ -438,23 +437,93 @@ class MainPage(tk.Frame):
             except Exception as e:
                 print(f"Failed to play sound: {e}")
 
-        # Groovy Button
-        button_groovy = tk.Button(
-            self,
-            text="Groovy",
-            command=lambda: play_sound_and_switch("Groovy", "tvtime.wav"),
-            **button_opts
-        )
-        button_groovy.place(x=900, y=500)
+        # button_groovy = tk.Button(
+        #     self,
+        #     text="Groovy",
+        #     command=lambda: play_sound_and_switch("Groovy", "tvtime.wav"),
+        #     **button_opts
+        # )
+        # button_groovy.place(x=900, y=500)
+        #
+        # button_glooby = tk.Button(
+        #     self,
+        #     text="Glooby",
+        #     command=lambda: play_sound_and_switch("Glooby", "didntpush.wav"),
+        #     **button_opts
+        # )
+        # button_glooby.place(x=1100, y=500)
 
-        # Glooby Button
-        button_glooby = tk.Button(
-            self,
-            text="Glooby",
-            command=lambda: play_sound_and_switch("Glooby", "didntpush.wav"),
-            **button_opts
-        )
-        button_glooby.place(x=1100, y=500)
+    def load_background(self):
+        config = configparser.ConfigParser()
+        config.optionxform = str
+        config.read("split.ini")
+
+        bg_enabled = config.getboolean("Toggles", "bg_enabled", fallback=True)
+
+        # If a canvas already exists (e.g. toggling), destroy it first
+        if hasattr(self, "canvas"):
+            try:
+                self.canvas.destroy()
+            except:
+                pass
+
+        if bg_enabled:
+            self.canvas = tk.Canvas(self, width=1280, height=720, highlightthickness=0, bd=0)
+            self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
+
+            # Put canvas behind widgets (title_label)
+            self.canvas.tk.call('lower', self.canvas._w)
+
+
+            # Load and tile background image
+            bg_path = os.path.join(current_dir, "assets", "mainbg.png")
+            self.bg_image = Image.open(bg_path)
+            self.tk_bg = ImageTk.PhotoImage(self.bg_image)
+            self.bg_width, self.bg_height = self.bg_image.size
+
+            tiles_x = (1280 // self.bg_width) + 3
+            tiles_y = (720 // self.bg_height) + 3
+
+            self.bg_items = []
+            for row in range(tiles_y):
+                for col in range(tiles_x):
+                    x = col * self.bg_width
+                    y = row * self.bg_height
+                    item = self.canvas.create_image(x, y, anchor="nw", image=self.tk_bg)
+                    self.bg_items.append(item)
+
+            self.scroll_speed_x = -1.2
+            self.scroll_speed_y = -0.7
+            self.animate_background()
+        else:
+            # No background, just ensure canvas is gone
+            if hasattr(self, "canvas"):
+                try:
+                    self.canvas.destroy()
+                except:
+                    pass
+
+    def animate_background(self):
+        if not hasattr(self, "canvas") or not self.canvas.winfo_exists():
+            # Canvas no longer exists, stop animation
+            return
+
+        for item in self.bg_items:
+            self.canvas.move(item, self.scroll_speed_x, self.scroll_speed_y)
+
+        for item in self.bg_items:
+            x, y = self.canvas.coords(item)
+            if x <= -self.bg_width:
+                self.canvas.move(item, self.bg_width * ((1280 // self.bg_width) + 2), 0)
+            elif x >= 1280:
+                self.canvas.move(item, -self.bg_width * ((1280 // self.bg_width) + 2), 0)
+
+            if y <= -self.bg_height:
+                self.canvas.move(item, 0, self.bg_height * ((720 // self.bg_height) + 2))
+            elif y >= 720:
+                self.canvas.move(item, 0, -self.bg_height * ((720 // self.bg_height) + 2))
+
+        self.after(16, self.animate_background)  # 60 FPS
 
 
 class ModLoader(tk.Frame):
@@ -857,8 +926,6 @@ class ModPage(tk.Frame):
         # ────────────────
         # Load game_dir from split.ini
         # ────────────────
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        split_ini_path = os.path.join(script_dir, "split.ini")
 
         game_dir = None
         if os.path.exists(split_ini_path):
@@ -1032,148 +1099,7 @@ class ModPage(tk.Frame):
                 messagebox.showerror("Restore Failed", f"Could not restore file:\n\n{backup}\n\nError: {e}")
 
 
-# class ModBrowser(tk.Frame):
-#     def __init__(self, parent, controller):
-#         super().__init__(parent, bg="white")
-#         self.controller = controller
-#         self.api = PyBanana()  # GameBanana API client
-#         self.current_page = 0
-#         self.mods_per_page = 6
-#         self.thumbnail_size = (400, 250)
-#         self.mod_images = []  # prevent garbage collection of thumbnails
-#
-#         # Scrolling background (shared with ModLoader)
-#         bg_path = os.path.join(current_dir, "assets", "background.jpg")
-#         self.bg_canvas, self.bg_photo = add_scrolling_background(self, bg_path)
-#
-#         # Title + Back button
-#         tk.Label(self,
-#                  text="Mod Browser Page",
-#                  font=("Arial", 35, "bold"),
-#                  fg="black", bg="white",
-#                  anchor="nw",
-#                  padx=15, pady=15).place(x=0, y=0)
-#
-#         tk.Button(self,
-#                   text="Back",
-#                   font=("Arial", 20),
-#                   command=lambda: controller.show_frame("MainPage")) \
-#             .place(x=1100, y=28)
-#
-#         # Container for mod cards
-#         self.button_frame = tk.Frame(self, bg="white")
-#         self.button_frame.place(relx=0.5, rely=0.5, anchor="center")
-#
-#         # Navigation buttons
-#         self.prev_btn = tk.Button(self, text="←", font=("Arial", 20),
-#                                   command=self.prev_page)
-#         self.prev_btn.place(x=50, rely=0.95, anchor="sw")
-#
-#         self.next_btn = tk.Button(self, text="→", font=("Arial", 20),
-#                                   command=self.next_page)
-#         self.next_btn.place(x=1230, rely=0.95, anchor="se")
-#
-#         # Load mods
-#         self.fetch_mods()
-#
-#     def fetch_mods(self):
-#         """Fetch mod data from GameBanana API and store it."""
-#         try:
-#             results = self.api.search(
-#                 query="pizza tower",
-#                 model=ModelType.MOD,
-#                 order=OrderResult.RELEVANCE,
-#                 page=1,
-#                 per_page=100
-#             )
-#
-#             self.all_mods = []
-#             for mod in results.records:
-#                 mod_info = {
-#                     "name": mod.name,
-#                     "url": mod.url,
-#                     "profile_url": getattr(mod, "profile_url", None),
-#                     "creator": getattr(mod, "owner_name", "Unknown"),
-#                     "posted": str(mod.date),
-#                     "description": (mod.description or "")[:100]
-#                 }
-#
-#                 # Try loading a thumbnail if available
-#                 try:
-#                     if mod_info["profile_url"]:
-#                         image_data = requests.get(mod_info["profile_url"], timeout=5).content
-#                         img = Image.open(io.BytesIO(image_data)).resize(self.thumbnail_size, Image.LANCZOS)
-#                         photo = ImageTk.PhotoImage(img)
-#                         mod_info["image"] = photo
-#                         self.mod_images.append(photo)  # Store reference
-#                     else:
-#                         mod_info["image"] = None
-#                 except Exception as e:
-#                     print(f"Failed to load image: {e}")
-#                     mod_info["image"] = None
-#
-#                 self.all_mods.append(mod_info)
-#
-#             self.display_mods()
-#
-#         except Exception as e:
-#             print(f"Error fetching mods: {e}")
-#             self.all_mods = []
-#
-#     def display_mods(self):
-#         """Displays the current page of mods in a button grid."""
-#         for widget in self.button_frame.winfo_children():
-#             widget.destroy()
-#
-#         self.button_frame.config(width=800, height=500)
-#         self.button_frame.pack_propagate(False)
-#
-#         start = self.current_page * self.mods_per_page
-#         end = start + self.mods_per_page
-#         current_mods = self.all_mods[start:end]
-#
-#         for idx, mod in enumerate(current_mods):
-#             row = idx // 3
-#             col = idx % 3
-#
-#             wrapper = tk.Frame(self.button_frame,
-#                                width=490,
-#                                height=480,
-#                                bg=self["bg"],
-#                                highlightthickness=0,
-#                                bd=0)
-#             wrapper.grid(row=row, column=col, padx=20, pady=20)
-#             wrapper.grid_propagate(False)
-#
-#             btn = tk.Button(wrapper,
-#                             text=mod["name"],
-#                             font=("Arial", 24, "bold"),
-#                             image=mod.get("image"),
-#                             compound="top",
-#                             wraplength=480,
-#                             relief="raised",
-#                             bd=0,
-#                             bg=wrapper["bg"],
-#                             activebackground=wrapper["bg"],
-#                             command=lambda name=mod["name"]: print(f"{name} clicked"))
-#             btn.pack(fill="both", expand=True)
-#
-#         total_pages = len(self.all_mods) // self.mods_per_page
-#         if len(self.all_mods) % self.mods_per_page:
-#             total_pages += 1
-#
-#         self.prev_btn.config(state="normal" if self.current_page > 0 else "disabled")
-#         self.next_btn.config(state="normal" if self.current_page < total_pages - 1 else "disabled")
-#
-#     def next_page(self):
-#         """Switch to the next page."""
-#         self.current_page += 1
-#         self.display_mods()
-#
-#     def prev_page(self):
-#         """Switch to the previous page."""
-#         self.current_page -= 1
-#         self.display_mods()
+
 
 
 class Settings(tk.Frame):
@@ -1181,19 +1107,34 @@ class Settings(tk.Frame):
         super().__init__(parent, bg="white")
         self.controller = controller
 
-        # Page title
-        title_label = tk.Label(self,
-                               text="Settings",
-                               font=("Arial", 35, "bold"),
-                               anchor="nw",
-                               fg="black",
-                               bg="white",
-                               padx=15,
-                               pady=15)
+        title_label = tk.Label(
+            self,
+            text="Settings",
+            font=("Arial", 35, "bold"),
+            anchor="nw",
+            fg="black",
+            bg="white",
+            padx=15,
+            pady=15
+        )
         title_label.place(x=0, y=0)
 
+        def toggle_bg():
+            config = configparser.ConfigParser()
+            config.optionxform = str
+            config.read("split.ini")
+
+            current = config.getboolean("Toggles", "bg_enabled", fallback=True)
+            config.set("Toggles", "bg_enabled", str(not current))
+
+            with open("split.ini", "w") as f:
+                config.write(f)
+
+            # Just reload the background without destroying MainPage
+            main_page = self.controller.frames["MainPage"]
+            main_page.load_background()
+
         def find_game_dir():
-            """Opens a dialog to select game directory and saves it to split.ini."""
             game_dir = filedialog.askdirectory()
             if not game_dir:
                 return
@@ -1205,7 +1146,7 @@ class Settings(tk.Frame):
             if not config.has_section("Paths"):
                 config.add_section("Paths")
 
-            config.set("Paths", "game_dir", str(game_dir))
+            config.set("Paths", "game_dir", game_dir)
 
             with open("split.ini", "w") as configfile:
                 config.write(configfile)
@@ -1213,18 +1154,24 @@ class Settings(tk.Frame):
         tk.Button(self,
                   text="Select directory",
                   font=("Arial", 20, "bold"),
-                  command=find_game_dir).place(x=300, y=200)
+                  command=find_game_dir).place(x=100, y=200)
 
         # NOTE: make_compatible must exist somewhere above this class
         tk.Button(self,
-                  text="Convert",
+                  text="Convert Mod",
                   font=("Arial", 20, "bold"),
-                  command=make_compatible).place(x=800, y=200)
+                  command=make_compatible).place(x=100, y=300)
 
         tk.Button(self,
                   text="Back",
                   font=("Arial", 20),
-                  command=lambda: controller.show_frame("MainPage")).place(x=1100, y=28)
+                  command=lambda: self.controller.show_frame("MainPage")).place(x=1100, y=28)
+
+        tk.Button(self,
+                  text="Toggle BG",
+                  font=("Arial", 20),
+                  command=toggle_bg
+                  ).place(x=100, y=400)
 
 
 class Groovy(tk.Frame):
