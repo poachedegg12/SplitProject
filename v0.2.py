@@ -50,15 +50,12 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 context = ssl.create_default_context(cafile=certifi.where())
 api = PyBanana()
 
-global script_dir
 script_dir = os.path.dirname(os.path.abspath(__file__))
-global split_ini_path
 split_ini_path = os.path.join(script_dir, "split.ini")
 
 config = configparser.ConfigParser()
 config.optionxform = str
 config.read(split_ini_path)
-global bg_enabled
 bg_enabled = config.get("Toggles", "bg_enabled")
 
 # ────────────────
