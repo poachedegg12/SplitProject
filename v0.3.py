@@ -10,6 +10,9 @@ import ssl
 import subprocess
 import tempfile
 import threading
+import sys
+import io
+import atexit
 # ───────────────────────────────────────────
 # Tkinter GUI Toolkit Imports
 # ───────────────────────────────────────────
@@ -18,7 +21,6 @@ from functools import partial
 from tkinter import (
     ttk, filedialog, messagebox, Scrollbar, Text, simpledialog
 )
-
 # ───────────────────────────────────────────
 # Third-Party Library Imports
 # ───────────────────────────────────────────
@@ -46,114 +48,133 @@ from selenium.webdriver.support.ui import WebDriverWait
 # ───────────────────────────────────────────
 # Setup
 # ───────────────────────────────────────────
-current_dir = os.path.dirname(os.path.abspath(__file__))
-context = ssl.create_default_context(cafile=certifi.where())
-api = PyBanana()
+context = ssl.create_default_context(cafile=certifi.where()) # Helps facilitate the connection to the Gamebanana API
+# api = PyBanana() # Initialises PyBanana, currently unneeded
+current_dir = getattr(sys, '_MEIPASS', os.path.abspath(".")) # Stores the directory of the executable
+TIMEOUT_DELAY = 3
+_temp_files = [] # Dummy dictionary
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
+def get_exe_dir():
+    """Return the directory where the executable or script is located."""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+exe_dir = get_exe_dir()
+ini_path = os.path.join(exe_dir, "split.ini")
+
+# If it doesn't exist yet, create it with default values
+if not os.path.exists(ini_path):
+    config = configparser.ConfigParser()
+    config["Paths"] = {"game_dir": ""}
+    config["Toggles"] = {"bg_enabled": "True"}
+    with open(ini_path, "w") as configfile:
+        config.write(configfile)
+    print(f"Created default config at {ini_path}")
+
+# Load config
+config = configparser.ConfigParser()
+config.read(ini_path)
+
+if hasattr(sys, '_MEIPASS'):
+    # Running as PyInstaller bundle
+    script_dir = sys._MEIPASS
+else:
+    # Running as normal script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
 split_ini_path = os.path.join(script_dir, "split.ini")
 
+if getattr(sys, 'frozen', False):
+    # Running as a PyInstaller bundle
+    base_path = sys._MEIPASS
+else:
+    base_path = os.path.abspath(".")
+
+config_path = os.path.join(base_path, 'split.ini')
+
 config = configparser.ConfigParser()
-config.optionxform = str
-config.read(split_ini_path)
+config.read(config_path)
+
+print(f"Config loaded from: {config_path}")
+print(f"Sections found: {config.sections()}")
+for section in config.sections():
+    print(f"[{section}]")
+    for key, value in config.items(section):
+        print(f"{key} = {value}")
+
 bg_enabled = config.get("Toggles", "bg_enabled")
 
 # ────────────────
 # Utility Functions
 # ────────────────
-TIMEOUT_DELAY = 3
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and PyInstaller """
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+def load_image_safely(path, size=None, convert_mode="RGBA"):
+    """
+    Loads an image safely from within a PyInstaller package or directly from disk.
+    - `path`: full path to the image
+    - `size`: optional (width, height) to resize to
+    - `convert_mode`: "RGBA" or similar mode for PIL conversion
+    Returns a PIL.Image object or None.
+    """
+    try:
+        with open(path, "rb") as f:
+            image_data = f.read()
+        image = Image.open(io.BytesIO(image_data))
+        if convert_mode:
+            image = image.convert(convert_mode)
+        if size:
+            image = image.resize(size, Image.LANCZOS)
+        return image
+    except Exception as e:
+        print(f"Image loading failed ({path}): {e}")
+        return None
+
+@atexit.register
+def cleanup_temp_images():
+    for f in _temp_files:
+        try:
+            os.remove(f)
+        except:
+            pass
+
+def get_base_path():
+    """
+    Returns the base path of the executable or script.
+    Works both when compiled (PyInstaller) and during development.
+    """
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)  # path of the .exe when compiled
+    return os.path.dirname(os.path.abspath(__file__))  # path of the script when running normally
+
+
+def get_asset_path(filename):
+    if hasattr(sys, '_MEIPASS'):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, 'assets', filename)
+
+
+bg_path = get_asset_path('mainbg.png')
+
 
 def make_mod_folder():
-    if not os.path.isdir(os.path.join(current_dir, "mods")):
-        os.mkdir(os.path.join(current_dir, "mods"))
+    base_path = get_base_path()
+    mods_path = os.path.join(base_path, "mods")
+    os.makedirs(mods_path, exist_ok=True)  # creates the folder if it doesn't exist
 
 make_mod_folder()
 
 
-class LoadingScreen(tk.Toplevel):
-    def __init__(self, master, total_steps):
-        super().__init__(master)
-        self.title("Loading Split Modding Program...")
-        self.geometry("500x250")
-        self.resizable(False, False)
 
-        self.progress = ttk.Progressbar(self, mode='determinate', maximum=total_steps)
-        self.progress.pack(fill='x', padx=20, pady=(20, 10))
-
-        self.log_text = tk.Text(self, height=8, state='disabled', bg='black', fg='lime', font=("Courier", 10))
-        self.log_text.pack(fill='both', expand=True, padx=20, pady=(0, 20))
-        self.update_idletasks()
-
-    def log(self, message):
-        self.log_text.configure(state='normal')
-        self.log_text.insert('end', message + '\n')
-        self.log_text.configure(state='disabled')
-        self.log_text.yview_moveto(1.0)
-        self.update()
-
-    def update_progress(self, step):
-        self.progress['value'] = step
-        self.update_idletasks()
-
-
-def process_mod(ini_id, mod_dir, splash: LoadingScreen):
-    try:
-        splash.log("Creating GameBanana API interface...")
-        api = PyBanana()
-        splash.update_progress(1)
-
-        splash.log(f"Fetching mod profile for ID {ini_id}...")
-        mod = api.get_mod_profile(int(ini_id))
-        splash.update_progress(2)
-
-        name = mod.name or ""
-        author = mod.submitter.name if mod.submitter else ""
-        description = BeautifulSoup(mod.text or "", "html.parser").get_text().strip()
-        video_link = ""
-        date_made = ""
-        if mod.base and mod.base.date_added:
-            try:
-                date_made = mod.base.date_added.strftime("%Y-%m-%d")
-            except Exception:
-                date_made = ""
-        like_count = str(mod.like_count or 0)
-        download_count = str(mod.download_count or 0)
-        link = f"https://gamebanana.com/mods/{ini_id}"
-
-        splash.log("Writing mod.ini file...")
-        with open(os.path.join(mod_dir, "mod.ini"), "w", encoding="utf-8") as f:
-            f.write("[Mod]\n")
-            f.write(f"name = {name}\n")
-            f.write(f"description = {description}\n")
-            f.write(f"video_link = {video_link}\n")
-            f.write(f"author = {author}\n")
-            f.write(f"date_made = {date_made}\n")
-            f.write(f"like_count = {like_count}\n")
-            f.write(f"download_count = {download_count}\n")
-            f.write(f"link = {link}\n")
-        splash.update_progress(3)
-
-        splash.log("Starting browser to fetch thumbnail...")
-        driver = create_driver()
-        splash.update_progress(4)
-
-        splash.log("Fetching first thumbnail URL (this may take a while)...")
-        thumb_url = get_first_thumbnail(driver, ini_id)
-        driver.quit()
-        splash.update_progress(5)
-
-        if thumb_url:
-            splash.log(f"Downloading thumbnail from: {thumb_url}")
-            download_thumbnail(thumb_url, os.path.join(mod_dir, "thumbnail.jpg"))
-        else:
-            splash.log("No thumbnail found.")
-
-        splash.update_progress(6)
-        splash.log("Process complete!")
-
-    except Exception as e:
-        splash.log(f"Error: {e}")
-        messagebox.showerror("Error", f"Failed to handle mod ID: {e}")
 
 
 def create_driver():
@@ -310,7 +331,9 @@ def create_faded_image(path, fade_factor=0.3, size=(700, 250)):
     Returns a PhotoImage ready for Tkinter use.
     """
     try:
-        image = Image.open(path).convert("RGBA").resize(size, Image.LANCZOS)
+        image = load_image_safely(path, convert_mode="RGBA", size=size)
+        if image is None:
+            return None
         alpha = image.split()[3]
         alpha = alpha.point(lambda p: int(p * fade_factor))
         image.putalpha(alpha)
@@ -326,8 +349,13 @@ def add_scrolling_background(parent_frame, image_path, canvas_size=(1280, 720), 
     Returns the canvas and PhotoImage to retain a reference.
     """
     try:
-        # Ensure the image is wide enough to scroll
-        image = Image.open(image_path).resize((canvas_size[0] * 2, canvas_size[1]), Image.LANCZOS)
+        image = load_image_safely(
+            image_path,
+            size=(canvas_size[0] * 2, canvas_size[1])
+        )
+        if image is None:
+            raise ValueError("Image could not be loaded.")
+
         photo = ImageTk.PhotoImage(image)
 
         canvas = tk.Canvas(parent_frame, width=canvas_size[0], height=canvas_size[1], highlightthickness=0)
@@ -338,22 +366,107 @@ def add_scrolling_background(parent_frame, image_path, canvas_size=(1280, 720), 
         def scroll():
             canvas.move(image_item, -scroll_speed, 0)
             x, _ = canvas.coords(image_item)
-
             if x <= -canvas_size[0]:
                 canvas.coords(image_item, 0, 0)
-
             parent_frame.after(20, scroll)
 
-        scroll()  # Start scrolling animation
+        scroll()
         return canvas, photo
+
     except Exception as e:
         print(f"Failed to load background: {e}")
         return None, None
 
 
+
+
 # ─────────────
 # Main UI Classes
 # ─────────────
+
+class LoadingScreen(tk.Toplevel):
+    def __init__(self, master, total_steps):
+        super().__init__(master)
+        self.title("Loading Split Modding Program...")
+        self.geometry("500x250")
+        self.resizable(False, False)
+
+        self.progress = ttk.Progressbar(self, mode='determinate', maximum=total_steps)
+        self.progress.pack(fill='x', padx=20, pady=(20, 10))
+
+        self.log_text = tk.Text(self, height=8, state='disabled', bg='black', fg='lime', font=("Courier", 10))
+        self.log_text.pack(fill='both', expand=True, padx=20, pady=(0, 20))
+        self.update_idletasks()
+
+    def log(self, message):
+        self.log_text.configure(state='normal')
+        self.log_text.insert('end', message + '\n')
+        self.log_text.configure(state='disabled')
+        self.log_text.yview_moveto(1.0)
+        self.update()
+
+    def update_progress(self, step):
+        self.progress['value'] = step
+        self.update_idletasks()
+
+def process_mod(ini_id, mod_dir, splash: LoadingScreen):
+    try:
+        splash.log("Creating GameBanana API interface...")
+        api = PyBanana()
+        splash.update_progress(1)
+
+        splash.log(f"Fetching mod profile for ID {ini_id}...")
+        mod = api.get_mod_profile(int(ini_id))
+        splash.update_progress(2)
+
+        name = mod.name or ""
+        author = mod.submitter.name if mod.submitter else ""
+        description = BeautifulSoup(mod.text or "", "html.parser").get_text().strip()
+        video_link = ""
+        date_made = ""
+        if mod.base and mod.base.date_added:
+            try:
+                date_made = mod.base.date_added.strftime("%Y-%m-%d")
+            except Exception:
+                date_made = ""
+        like_count = str(mod.like_count or 0)
+        download_count = str(mod.download_count or 0)
+        link = f"https://gamebanana.com/mods/{ini_id}"
+
+        splash.log("Writing mod.ini file...")
+        with open(os.path.join(mod_dir, "mod.ini"), "w", encoding="utf-8") as f:
+            f.write("[Mod]\n")
+            f.write(f"name = {name}\n")
+            f.write(f"description = {description}\n")
+            f.write(f"video_link = {video_link}\n")
+            f.write(f"author = {author}\n")
+            f.write(f"date_made = {date_made}\n")
+            f.write(f"like_count = {like_count}\n")
+            f.write(f"download_count = {download_count}\n")
+            f.write(f"link = {link}\n")
+        splash.update_progress(3)
+
+        splash.log("Starting browser to fetch thumbnail...")
+        driver = create_driver()
+        splash.update_progress(4)
+
+        splash.log("Fetching first thumbnail URL (this may take a while)...")
+        thumb_url = get_first_thumbnail(driver, ini_id)
+        driver.quit()
+        splash.update_progress(5)
+
+        if thumb_url:
+            splash.log(f"Downloading thumbnail from: {thumb_url}")
+            download_thumbnail(thumb_url, os.path.join(mod_dir, "thumbnail.jpg"))
+        else:
+            splash.log("No thumbnail found.")
+
+        splash.update_progress(6)
+        splash.log("Process complete!")
+
+    except Exception as e:
+        splash.log(f"Error: {e}")
+        messagebox.showerror("Error", f"Failed to handle mod ID: {e}")
 
 class MainPage(tk.Frame):
     def __init__(self, parent, controller):
@@ -474,7 +587,7 @@ class MainPage(tk.Frame):
 
             # Load and tile background image
             bg_path = os.path.join(current_dir, "assets", "mainbg.png")
-            self.bg_image = Image.open(bg_path)
+            self.bg_image = load_image_safely(bg_path)
             self.tk_bg = ImageTk.PhotoImage(self.bg_image)
             self.bg_width, self.bg_height = self.bg_image.size
 
@@ -684,17 +797,17 @@ class ModLoader(tk.Frame):
             # Load thumbnail image
             if os.path.exists(image_path):
                 try:
-                    original = Image.open(image_path)
-                    resized = original.resize(self.thumbnail_size, Image.LANCZOS)
-                    mod_info["image"] = ImageTk.PhotoImage(resized)
-                    mod_info["image_original"] = original  # <── store original image for resizing later
-                except Exception:
-                    pass
-
+                    original = load_image_safely(os.path.join(current_dir, "Assets/default.png"),
+                                                 size=self.thumbnail_size)
+                    mod_info["image"] = ImageTk.PhotoImage(original)
+                    mod_info["image_original"] = original  # store original image for resizing later
+                except Exception as e:
+                    print(f"Failed to load thumbnail image: {e}")
+                    mod_info["image"] = None
+                    mod_info["image_original"] = None
             else:
-                original = (Image.open(os.path.join(current_dir, "Assets/default.png")))
-                resized = original.resize(self.thumbnail_size, Image.LANCZOS)
-                mod_info["image"] = ImageTk.PhotoImage(resized)
+                original = load_image_safely(os.path.join(current_dir, "Assets/default.png"), size=self.thumbnail_size)
+                mod_info["image"] = ImageTk.PhotoImage(original)
                 mod_info["image_original"] = original
 
             mods.append(mod_info)
@@ -894,7 +1007,7 @@ class ModPage(tk.Frame):
         self.desc.insert("1.0", mod["description"])
 
         # Resize mod image to fit nicely
-        original_img = mod.get("image_original")  # Save original in ModLoader
+        original_img = mod.get("image_original")
         if original_img:
             resized = original_img.copy().resize(self.image_size, Image.LANCZOS)
             self.mod_img_resized = ImageTk.PhotoImage(resized)
@@ -1097,8 +1210,6 @@ class ModPage(tk.Frame):
 
 
 
-
-
 class Settings(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent, bg="white")
@@ -1170,6 +1281,18 @@ class Settings(tk.Frame):
                   command=toggle_bg
                   ).place(x=100, y=400)
 
+        tk.Button(self,
+                  text="Groovy",
+                  font=("Arial", 20),
+                  command=lambda: self.controller.show_frame("Groovy")
+                  ).place(x=300, y=200)
+
+        tk.Button(self,
+                  text="Groovy",
+                  font=("Arial", 20),
+                  command=lambda: self.controller.show_frame("Glooby")
+                  ).place(x=300, y=300)
+
 
 class Groovy(tk.Frame):
     def __init__(self, parent, controller):
@@ -1180,7 +1303,7 @@ class Groovy(tk.Frame):
         # Load all gifs and create labels, but defer placement to move()
         for num in range(1, 4):
             gif_path = os.path.join(current_dir, f"Assets/tenna{num}.gif")
-            gif = Image.open(gif_path)
+            gif = load_image_safely(gif_path)
             frames = [ImageTk.PhotoImage(f.copy().convert("RGBA")) for f in ImageSequence.Iterator(gif)]
 
             label = tk.Label(self, bg="white", borderwidth=0)
@@ -1314,4 +1437,3 @@ if __name__ == "__main__":
         app.deiconify()
     ))
     app.mainloop()
-
