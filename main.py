@@ -246,7 +246,7 @@ def get_asset_path(filename):
 
 
 # Path to the background image asset
-bg_path = get_asset_path('mainbg.png')
+bg_path = get_asset_path('main_class_background.png')
 
 
 def make_mod_folder():
@@ -713,10 +713,10 @@ class MainPage(tk.Frame):
         self.title_label.place(x=0, y=0)
 
         # Load faded banner images for buttons
-        self.loader_img = create_faded_image(os.path.join(current_dir, "assets", "examplebanner.jpg"))
+        self.loader_img = create_faded_image(os.path.join(current_dir, "assets", "placeholder_banner.jpg"))
         self.browser_img = create_faded_image(os.path.join(current_dir, "assets", "banner_dummy.png"))
         self.settings_img = create_faded_image(
-            os.path.join(current_dir, "assets", "examplebanner.jpg"),
+            os.path.join(current_dir, "assets", "placeholder_banner.jpg"),
             size=(300, 400)
         )
 
@@ -791,7 +791,7 @@ class MainPage(tk.Frame):
             self.canvas.tk.call('lower', self.canvas._w)
 
             # Load background image
-            bg_path = os.path.join(current_dir, "assets", "mainbg.png")
+            bg_path = os.path.join(current_dir, "assets", "main_class_background.png")
             self.bg_image = load_image_safely(bg_path)
             self.tk_bg = ImageTk.PhotoImage(self.bg_image)
             self.bg_width, self.bg_height = self.bg_image.size
@@ -873,7 +873,7 @@ class ModLoader(tk.Frame):
         self.bg_canvas = tk.Canvas(self, width=1280, height=720, highlightthickness=0)
         self.bg_canvas.place(x=0, y=0, relwidth=1, relheight=1)
 
-        bg_path = os.path.join(current_dir, "assets", "background.jpg")
+        bg_path = os.path.join(current_dir, "assets", "loader_class_background.jpg")
         self.bg_canvas, self.bg_photo = add_scrolling_background(self, bg_path)
 
         # ────────────────
@@ -1043,7 +1043,7 @@ class ModLoader(tk.Frame):
             # Load thumbnail image
             if os.path.exists(image_path):
                 try:
-                    original = load_image_safely(os.path.join(current_dir, "Assets/default.png"),
+                    original = load_image_safely(os.path.join(current_dir, "Assets/default_mod_icon.png"),
                                                  size=self.thumbnail_size)
                     mod_info["image"] = ImageTk.PhotoImage(original)
                     mod_info["image_original"] = original
@@ -1052,7 +1052,7 @@ class ModLoader(tk.Frame):
                     mod_info["image"] = None
                     mod_info["image_original"] = None
             else:
-                original = load_image_safely(os.path.join(current_dir, "Assets/default.png"), size=self.thumbnail_size)
+                original = load_image_safely(os.path.join(current_dir, "Assets/default_mod_icon.png"), size=self.thumbnail_size)
                 mod_info["image"] = ImageTk.PhotoImage(original)
                 mod_info["image_original"] = original
 
