@@ -1043,7 +1043,7 @@ class ModLoader(tk.Frame):
             # Load thumbnail image
             if os.path.exists(image_path):
                 try:
-                    original = load_image_safely(os.path.join(current_dir, "Assets/default_mod_icon.png"),
+                    original = load_image_safely(os.path.join(image_path),
                                                  size=self.thumbnail_size)
                     mod_info["image"] = ImageTk.PhotoImage(original)
                     mod_info["image_original"] = original
