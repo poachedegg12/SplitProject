@@ -21,7 +21,6 @@ from functools import partial
 from tkinter import (
     ttk, filedialog, messagebox, Scrollbar, Text, simpledialog
 )
-
 # ───────────────────────────────────────────
 # Third-Party Library Imports
 # ───────────────────────────────────────────
@@ -49,12 +48,11 @@ from selenium.webdriver.support.ui import WebDriverWait
 # ───────────────────────────────────────────
 # Setup
 # ───────────────────────────────────────────
-context = ssl.create_default_context(cafile=certifi.where())
-api = PyBanana()
-
-_temp_files = []
-
-_temp_files = []
+context = ssl.create_default_context(cafile=certifi.where()) # Helps facilitate the connection to the Gamebanana API
+# api = PyBanana() # Initialises PyBanana, currently unneeded
+current_dir = getattr(sys, '_MEIPASS', os.path.abspath(".")) # Stores the directory of the executable
+TIMEOUT_DELAY = 3
+_temp_files = [] # Dummy dictionary
 
 def get_exe_dir():
     """Return the directory where the executable or script is located."""
@@ -78,6 +76,38 @@ if not os.path.exists(ini_path):
 config = configparser.ConfigParser()
 config.read(ini_path)
 
+if hasattr(sys, '_MEIPASS'):
+    # Running as PyInstaller bundle
+    script_dir = sys._MEIPASS
+else:
+    # Running as normal script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
+split_ini_path = os.path.join(script_dir, "split.ini")
+
+if getattr(sys, 'frozen', False):
+    # Running as a PyInstaller bundle
+    base_path = sys._MEIPASS
+else:
+    base_path = os.path.abspath(".")
+
+config_path = os.path.join(base_path, 'split.ini')
+
+config = configparser.ConfigParser()
+config.read(config_path)
+
+print(f"Config loaded from: {config_path}")
+print(f"Sections found: {config.sections()}")
+for section in config.sections():
+    print(f"[{section}]")
+    for key, value in config.items(section):
+        print(f"{key} = {value}")
+
+bg_enabled = config.get("Toggles", "bg_enabled")
+
+# ────────────────
+# Utility Functions
+# ────────────────
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and PyInstaller """
     try:
@@ -115,55 +145,6 @@ def cleanup_temp_images():
         except:
             pass
 
-if hasattr(sys, '_MEIPASS'):
-    # Running as PyInstaller bundle
-    script_dir = sys._MEIPASS
-else:
-    # Running as normal script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-
-split_ini_path = os.path.join(script_dir, "split.ini")
-
-if getattr(sys, 'frozen', False):
-    # Running as a PyInstaller bundle
-    base_path = sys._MEIPASS
-else:
-    base_path = os.path.abspath(".")
-
-config_path = os.path.join(base_path, 'split.ini')
-
-config = configparser.ConfigParser()
-config.read(config_path)
-
-print(f"Config loaded from: {config_path}")
-print(f"Sections found: {config.sections()}")
-for section in config.sections():
-    print(f"[{section}]")
-    for key, value in config.items(section):
-        print(f"{key} = {value}")
-
-bg_enabled = config.get("Toggles", "bg_enabled")
-
-
-
-def get_asset_path(filename):
-    if hasattr(sys, '_MEIPASS'):
-        base_path = sys._MEIPASS
-    else:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, 'assets', filename)
-
-bg_path = get_asset_path('mainbg.png')
-
-
-current_dir = getattr(sys, '_MEIPASS', os.path.abspath("."))
-
-
-# ────────────────
-# Utility Functions
-# ────────────────
-TIMEOUT_DELAY = 3
-
 def get_base_path():
     """
     Returns the base path of the executable or script.
@@ -173,6 +154,18 @@ def get_base_path():
         return os.path.dirname(sys.executable)  # path of the .exe when compiled
     return os.path.dirname(os.path.abspath(__file__))  # path of the script when running normally
 
+
+def get_asset_path(filename):
+    if hasattr(sys, '_MEIPASS'):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, 'assets', filename)
+
+
+bg_path = get_asset_path('mainbg.png')
+
+
 def make_mod_folder():
     base_path = get_base_path()
     mods_path = os.path.join(base_path, "mods")
@@ -181,90 +174,7 @@ def make_mod_folder():
 make_mod_folder()
 
 
-class LoadingScreen(tk.Toplevel):
-    def __init__(self, master, total_steps):
-        super().__init__(master)
-        self.title("Loading Split Modding Program...")
-        self.geometry("500x250")
-        self.resizable(False, False)
 
-        self.progress = ttk.Progressbar(self, mode='determinate', maximum=total_steps)
-        self.progress.pack(fill='x', padx=20, pady=(20, 10))
-
-        self.log_text = tk.Text(self, height=8, state='disabled', bg='black', fg='lime', font=("Courier", 10))
-        self.log_text.pack(fill='both', expand=True, padx=20, pady=(0, 20))
-        self.update_idletasks()
-
-    def log(self, message):
-        self.log_text.configure(state='normal')
-        self.log_text.insert('end', message + '\n')
-        self.log_text.configure(state='disabled')
-        self.log_text.yview_moveto(1.0)
-        self.update()
-
-    def update_progress(self, step):
-        self.progress['value'] = step
-        self.update_idletasks()
-
-
-def process_mod(ini_id, mod_dir, splash: LoadingScreen):
-    try:
-        splash.log("Creating GameBanana API interface...")
-        api = PyBanana()
-        splash.update_progress(1)
-
-        splash.log(f"Fetching mod profile for ID {ini_id}...")
-        mod = api.get_mod_profile(int(ini_id))
-        splash.update_progress(2)
-
-        name = mod.name or ""
-        author = mod.submitter.name if mod.submitter else ""
-        description = BeautifulSoup(mod.text or "", "html.parser").get_text().strip()
-        video_link = ""
-        date_made = ""
-        if mod.base and mod.base.date_added:
-            try:
-                date_made = mod.base.date_added.strftime("%Y-%m-%d")
-            except Exception:
-                date_made = ""
-        like_count = str(mod.like_count or 0)
-        download_count = str(mod.download_count or 0)
-        link = f"https://gamebanana.com/mods/{ini_id}"
-
-        splash.log("Writing mod.ini file...")
-        with open(os.path.join(mod_dir, "mod.ini"), "w", encoding="utf-8") as f:
-            f.write("[Mod]\n")
-            f.write(f"name = {name}\n")
-            f.write(f"description = {description}\n")
-            f.write(f"video_link = {video_link}\n")
-            f.write(f"author = {author}\n")
-            f.write(f"date_made = {date_made}\n")
-            f.write(f"like_count = {like_count}\n")
-            f.write(f"download_count = {download_count}\n")
-            f.write(f"link = {link}\n")
-        splash.update_progress(3)
-
-        splash.log("Starting browser to fetch thumbnail...")
-        driver = create_driver()
-        splash.update_progress(4)
-
-        splash.log("Fetching first thumbnail URL (this may take a while)...")
-        thumb_url = get_first_thumbnail(driver, ini_id)
-        driver.quit()
-        splash.update_progress(5)
-
-        if thumb_url:
-            splash.log(f"Downloading thumbnail from: {thumb_url}")
-            download_thumbnail(thumb_url, os.path.join(mod_dir, "thumbnail.jpg"))
-        else:
-            splash.log("No thumbnail found.")
-
-        splash.update_progress(6)
-        splash.log("Process complete!")
-
-    except Exception as e:
-        splash.log(f"Error: {e}")
-        messagebox.showerror("Error", f"Failed to handle mod ID: {e}")
 
 
 def create_driver():
@@ -473,6 +383,90 @@ def add_scrolling_background(parent_frame, image_path, canvas_size=(1280, 720), 
 # ─────────────
 # Main UI Classes
 # ─────────────
+
+class LoadingScreen(tk.Toplevel):
+    def __init__(self, master, total_steps):
+        super().__init__(master)
+        self.title("Loading Split Modding Program...")
+        self.geometry("500x250")
+        self.resizable(False, False)
+
+        self.progress = ttk.Progressbar(self, mode='determinate', maximum=total_steps)
+        self.progress.pack(fill='x', padx=20, pady=(20, 10))
+
+        self.log_text = tk.Text(self, height=8, state='disabled', bg='black', fg='lime', font=("Courier", 10))
+        self.log_text.pack(fill='both', expand=True, padx=20, pady=(0, 20))
+        self.update_idletasks()
+
+    def log(self, message):
+        self.log_text.configure(state='normal')
+        self.log_text.insert('end', message + '\n')
+        self.log_text.configure(state='disabled')
+        self.log_text.yview_moveto(1.0)
+        self.update()
+
+    def update_progress(self, step):
+        self.progress['value'] = step
+        self.update_idletasks()
+
+def process_mod(ini_id, mod_dir, splash: LoadingScreen):
+    try:
+        splash.log("Creating GameBanana API interface...")
+        api = PyBanana()
+        splash.update_progress(1)
+
+        splash.log(f"Fetching mod profile for ID {ini_id}...")
+        mod = api.get_mod_profile(int(ini_id))
+        splash.update_progress(2)
+
+        name = mod.name or ""
+        author = mod.submitter.name if mod.submitter else ""
+        description = BeautifulSoup(mod.text or "", "html.parser").get_text().strip()
+        video_link = ""
+        date_made = ""
+        if mod.base and mod.base.date_added:
+            try:
+                date_made = mod.base.date_added.strftime("%Y-%m-%d")
+            except Exception:
+                date_made = ""
+        like_count = str(mod.like_count or 0)
+        download_count = str(mod.download_count or 0)
+        link = f"https://gamebanana.com/mods/{ini_id}"
+
+        splash.log("Writing mod.ini file...")
+        with open(os.path.join(mod_dir, "mod.ini"), "w", encoding="utf-8") as f:
+            f.write("[Mod]\n")
+            f.write(f"name = {name}\n")
+            f.write(f"description = {description}\n")
+            f.write(f"video_link = {video_link}\n")
+            f.write(f"author = {author}\n")
+            f.write(f"date_made = {date_made}\n")
+            f.write(f"like_count = {like_count}\n")
+            f.write(f"download_count = {download_count}\n")
+            f.write(f"link = {link}\n")
+        splash.update_progress(3)
+
+        splash.log("Starting browser to fetch thumbnail...")
+        driver = create_driver()
+        splash.update_progress(4)
+
+        splash.log("Fetching first thumbnail URL (this may take a while)...")
+        thumb_url = get_first_thumbnail(driver, ini_id)
+        driver.quit()
+        splash.update_progress(5)
+
+        if thumb_url:
+            splash.log(f"Downloading thumbnail from: {thumb_url}")
+            download_thumbnail(thumb_url, os.path.join(mod_dir, "thumbnail.jpg"))
+        else:
+            splash.log("No thumbnail found.")
+
+        splash.update_progress(6)
+        splash.log("Process complete!")
+
+    except Exception as e:
+        splash.log(f"Error: {e}")
+        messagebox.showerror("Error", f"Failed to handle mod ID: {e}")
 
 class MainPage(tk.Frame):
     def __init__(self, parent, controller):
@@ -1216,8 +1210,6 @@ class ModPage(tk.Frame):
 
 
 
-
-
 class Settings(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent, bg="white")
@@ -1288,6 +1280,18 @@ class Settings(tk.Frame):
                   font=("Arial", 20),
                   command=toggle_bg
                   ).place(x=100, y=400)
+
+        tk.Button(self,
+                  text="Groovy",
+                  font=("Arial", 20),
+                  command=lambda: self.controller.show_frame("Groovy")
+                  ).place(x=300, y=200)
+
+        tk.Button(self,
+                  text="Groovy",
+                  font=("Arial", 20),
+                  command=lambda: self.controller.show_frame("Glooby")
+                  ).place(x=300, y=300)
 
 
 class Groovy(tk.Frame):
@@ -1433,4 +1437,3 @@ if __name__ == "__main__":
         app.deiconify()
     ))
     app.mainloop()
-

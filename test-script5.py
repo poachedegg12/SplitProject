@@ -1,0 +1,4 @@
+pyxdelta
+tkinter
+requests
+pillow

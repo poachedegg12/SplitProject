@@ -1,0 +1,9 @@
+certifi
+opencv-python
+pyxdelta
+requests
+simpleaudio
+Pillow
+beautifulsoup4
+pybanana
+selenium
