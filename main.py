@@ -27,10 +27,10 @@ from tkinter import (
 # Third-Party Library Imports
 # ───────────────────────────────────────────
 import certifi       # Provides Mozilla’s CA Bundle for SSL verification
-import cv2           # OpenCV library for image and video processing (currently unused here)
+# import cv2           # OpenCV library for image and video processing (currently unused here)
 import pyxdelta      # For binary diff/patch operations (currently unused here)
 import requests      # HTTP requests handling
-import simpleaudio as sa  # For playing audio files (currently unused here)
+# import simpleaudio as sa  # For playing audio files (currently unused here)
 from PIL import Image, ImageTk, ImageSequence  # Pillow library for image manipulation
 from bs4 import BeautifulSoup  # HTML/XML parser for web scraping (currently unused here)
 
@@ -757,14 +757,14 @@ class MainPage(tk.Frame):
         button_settings.place(x=900, y=100)
 
         # Example sound-playing navigation (commented out)
-        def play_sound_and_switch(frame_name, sound_file):
-            self.controller.show_frame(frame_name)
-            wave_path = os.path.join(current_dir, f"Assets/{sound_file}")
-            try:
-                wave_obj = sa.WaveObject.from_wave_file(wave_path)
-                wave_obj.play()
-            except Exception as e:
-                print(f"Failed to play sound: {e}")
+        # def play_sound_and_switch(frame_name, sound_file):
+        #     self.controller.show_frame(frame_name)
+        #     wave_path = os.path.join(current_dir, f"Assets/{sound_file}")
+        #     try:
+        #         wave_obj = sa.WaveObject.from_wave_file(wave_path)
+        #         wave_obj.play()
+        #     except Exception as e:
+        #         print(f"Failed to play sound: {e}")
 
     def load_background(self):
         """
@@ -867,6 +867,17 @@ class ModLoader(tk.Frame):
         super().__init__(parent, bg="white")
         self.controller = controller
 
+        def get_mods_path():
+            """Return the correct path to the mods folder whether running from .py or .exe"""
+            if getattr(sys, 'frozen', False):
+                # Running in a compiled exe
+                base_path = os.path.dirname(sys.executable)
+            else:
+                # Running from a .py file
+                base_path = os.path.dirname(os.path.abspath(__file__))
+
+            return os.path.join(base_path, "mods")
+
         # ────────────────
         # Background Setup
         # ────────────────
@@ -882,7 +893,7 @@ class ModLoader(tk.Frame):
         self.current_page = 0
         self.mods_per_page = 6
         self.thumbnail_size = (340, 180)
-        self.mods_path = os.path.join(current_dir, "mods")
+        self.mods_path = get_mods_path()
         self.mod_data = self.load_mods()
 
         # ────────────────

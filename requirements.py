@@ -15,7 +15,7 @@ packages = [
     "opencv-python",
     "pyxdelta",
     "requests",
-    "simpleaudio",
+   # "simpleaudio",
     "Pillow",
     "beautifulsoup4",
     "pybanana",
