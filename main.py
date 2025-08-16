@@ -103,34 +103,11 @@ if not os.path.exists(ini_path):
 config = configparser.ConfigParser()
 config.read(ini_path)
 
-# Determine the script directory depending on how it's executed
-if hasattr(sys, '_MEIPASS'):
-    # Running as PyInstaller bundle
-    script_dir = sys._MEIPASS
-else:
-    # Running as normal script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Define full path to configuration file (relative to script directory)
-split_ini_path = os.path.join(script_dir, "split.ini")
-
-# Determine base path for configuration depending on environment
-if getattr(sys, 'frozen', False):
-    base_path = sys._MEIPASS
-else:
-    base_path = os.path.abspath(".")
-
-# Final resolved path to the configuration file
-config_path = os.path.join(base_path, 'split.ini')
-
-# Read configuration from resolved path
-config = configparser.ConfigParser()
-config.read(config_path)
 
 # ───────────────────────────────────────────
 # Debug output of loaded configuration
 # ───────────────────────────────────────────
-print(f"Config loaded from: {config_path}")
+print(f"Config loaded from: {ini_path}")
 print(f"Sections found: {config.sections()}")
 for section in config.sections():
     print(f"[{section}]")
@@ -713,10 +690,10 @@ class MainPage(tk.Frame):
         self.title_label.place(x=0, y=0)
 
         # Load faded banner images for buttons
-        self.loader_img = create_faded_image(os.path.join(current_dir, "assets", "placeholder_banner.jpg"))
-        self.browser_img = create_faded_image(os.path.join(current_dir, "assets", "banner_dummy.png"))
+        self.loader_img = create_faded_image(resource_path(os.path.join(current_dir, "assets", "placeholder_banner.jpg")))
+        self.browser_img = create_faded_image(resource_path(os.path.join(current_dir, "assets", "banner_dummy.png")))
         self.settings_img = create_faded_image(
-            os.path.join(current_dir, "assets", "placeholder_banner.jpg"),
+            resource_path(os.path.join(current_dir, "assets", "placeholder_banner.jpg")),
             size=(300, 400)
         )
 
@@ -791,7 +768,7 @@ class MainPage(tk.Frame):
             self.canvas.tk.call('lower', self.canvas._w)
 
             # Load background image
-            bg_path = os.path.join(current_dir, "assets", "main_class_background.png")
+            bg_path = resource_path(os.path.join('assets', 'main_class_background.png'))
             self.bg_image = load_image_safely(bg_path)
             self.tk_bg = ImageTk.PhotoImage(self.bg_image)
             self.bg_width, self.bg_height = self.bg_image.size
@@ -884,7 +861,7 @@ class ModLoader(tk.Frame):
         self.bg_canvas = tk.Canvas(self, width=1280, height=720, highlightthickness=0)
         self.bg_canvas.place(x=0, y=0, relwidth=1, relheight=1)
 
-        bg_path = os.path.join(current_dir, "assets", "loader_class_background.jpg")
+        bg_path = resource_path(os.path.join(current_dir, "assets", "loader_class_background.jpg"))
         self.bg_canvas, self.bg_photo = add_scrolling_background(self, bg_path)
 
         # ────────────────
@@ -1063,7 +1040,7 @@ class ModLoader(tk.Frame):
                     mod_info["image"] = None
                     mod_info["image_original"] = None
             else:
-                original = load_image_safely(os.path.join(current_dir, "Assets/default_mod_icon.png"), size=self.thumbnail_size)
+                original = load_image_safely(resource_path(os.path.join(current_dir, "Assets/default_mod_icon.png")), size=self.thumbnail_size)
                 mod_info["image"] = ImageTk.PhotoImage(original)
                 mod_info["image_original"] = original
 
@@ -1339,10 +1316,10 @@ Link: {mod.get("link", "")}"""
 
         # --- Load game_dir from split.ini ---
         game_dir = None
-        if os.path.exists(split_ini_path):
+        if os.path.exists(ini_path):
             config = configparser.ConfigParser()
             config.optionxform = str
-            config.read(split_ini_path)
+            config.read(ini_path)
             if config.has_section("Paths") and config.has_option("Paths", "game_dir"):
                 game_dir = config.get("Paths", "game_dir")
                 print(f"Loaded game_dir from split.ini: {game_dir}")
