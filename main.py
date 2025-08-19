@@ -103,20 +103,6 @@ if not os.path.exists(ini_path):
 config = configparser.ConfigParser()
 config.read(ini_path)
 
-
-# ───────────────────────────────────────────
-# Debug output of loaded configuration
-# ───────────────────────────────────────────
-print(f"Config loaded from: {ini_path}")
-print(f"Sections found: {config.sections()}")
-for section in config.sections():
-    print(f"[{section}]")
-    for key, value in config.items(section):
-        print(f"{key} = {value}")
-
-# Store background toggle setting from config
-bg_enabled = config.get("Toggles", "bg_enabled")
-
 # ────────────────
 # Utility Functions
 # ────────────────
@@ -846,6 +832,7 @@ class ModLoader(tk.Frame):
 
         def get_mods_path():
             """Return the correct path to the mods folder whether running from .py or .exe"""
+            global base_path
             if getattr(sys, 'frozen', False):
                 # Running in a compiled exe
                 base_path = os.path.dirname(sys.executable)
@@ -913,6 +900,14 @@ class ModLoader(tk.Frame):
         )
         refresh_btn.place(x=980, y=28)
 
+        folder_btn = tk.Button(
+            self,
+            text="Open Mods Folder",
+            font=("Arial", 20),
+            command=self.open_mods_path
+        )
+        folder_btn.place(x=700, y=28)
+
         # ────────────────
         # Navigation Arrows
         # ────────────────
@@ -945,6 +940,17 @@ class ModLoader(tk.Frame):
         self.mod_data = self.load_mods()
         self.current_page = 0
         self.display_mods()
+
+    def open_mods_path(self):
+        try:
+            if platform.system() == "Windows":
+                os.startfile(os.path.join(base_path, "mods"))
+            elif platform.system() == "Darwin":
+                subprocess.Popen(["open", os.path.join(base_path, "mods")])
+            else:
+                subprocess.Popen(["xdg-open", os.path.join(base_path, "mods")])
+        except Exception as e:
+            print(f"Failed to open folder: {e}")
 
     def load_mods(self):
         """
@@ -1188,6 +1194,7 @@ class ModPage(tk.Frame):
             wrap="word",
             yscrollcommand=self.scrollbar.set
         )
+
         self.desc.place(x=20, y=350, width=650, height=350)
         self.scrollbar.config(command=self.desc.yview)
 
@@ -1291,6 +1298,8 @@ Likes: {mod.get("like_count", 0)}
 Link: {mod.get("link", "")}"""
         self.info_label.config(text=info_text)
 
+        self.desc.config(state=tk.DISABLED)
+
     def patch_mod(self):
         """
         Applies xdelta patches, copies mod assets, deletes obsolete files,
@@ -1307,6 +1316,9 @@ Link: {mod.get("link", "")}"""
             8. Launch the game.
             9. Restore backup files.
         """
+
+        splash = LoadingScreen(tk._default_root, total_steps=11)
+
         mod = self.controller.selected_mod
         mod_path = mod.get("mod_path")
 
@@ -1315,6 +1327,7 @@ Link: {mod.get("link", "")}"""
             return
 
         # --- Load game_dir from split.ini ---
+        splash.log("Loading the game directory...")
         game_dir = None
         if os.path.exists(ini_path):
             config = configparser.ConfigParser()
@@ -1323,23 +1336,28 @@ Link: {mod.get("link", "")}"""
             if config.has_section("Paths") and config.has_option("Paths", "game_dir"):
                 game_dir = config.get("Paths", "game_dir")
                 print(f"Loaded game_dir from split.ini: {game_dir}")
+        splash.update_progress(1)
 
         if not game_dir or not os.path.isdir(game_dir):
             print("Invalid or missing game_dir. Cannot patch.")
             return
 
         # --- Find patch files and targets ---
+        splash.log("Finding patch files...")
         xdelta_files = [f for f in os.listdir(mod_path) if f.endswith(".xdelta")]
         input_candidates = [
             f for f in os.listdir(game_dir)
             if f.lower().endswith((".exe", ".win")) and os.path.isfile(os.path.join(game_dir, f))
         ]
+        splash.update_progress(2)
 
         if not xdelta_files or not input_candidates:
             print("No patches or no valid input files found.")
             return
 
         # --- Determine main EXE file ---
+        splash.log(f"Found {len(xdelta_files)} patches.")
+        splash.update_progress(3)
         exe_candidates = [
             f for f in os.listdir(game_dir)
             if f.lower().endswith(".exe") and "unins" not in f.lower() and "setup" not in f.lower()
@@ -1356,8 +1374,11 @@ Link: {mod.get("link", "")}"""
         if not main_exe:
             messagebox.showwarning("Game Not Launched", "No .exe file found in game directory.")
             return
+        splash.log(f"Selecting {main_exe}...")
+        splash.update_progress(4)
 
         # --- Backup critical files ---
+        splash.log(f"Backing up game files...")
         backup_files = []
         for file_name in [os.path.basename(main_exe), "data.win"]:
             original_path = os.path.join(game_dir, file_name)
@@ -1370,10 +1391,12 @@ Link: {mod.get("link", "")}"""
                 except Exception as e:
                     print(f"Failed to back up {file_name}: {e}")
                     messagebox.showerror("Backup Failed", f"Could not back up {file_name}:\n\n{e}")
+        splash.update_progress(5)
 
         # --- Apply patches ---
         patched_any = False
         for xdelta_file in xdelta_files:
+            splash.log(f"Applying patch {xdelta_file}...")
             patch_path = os.path.join(mod_path, xdelta_file)
             matched_input = next((f for f in input_candidates if f.lower() in xdelta_file.lower()), None)
             if not matched_input:
@@ -1397,8 +1420,11 @@ Link: {mod.get("link", "")}"""
                     print(f"Failed patch: {e}")
                     if os.path.exists(temp_output_path):
                         os.remove(temp_output_path)
+
             except Exception as e:
                 print(f"Patch error: {e}")
+            splash.update_progress(6)
+
 
         if not patched_any:
             print("No patches applied.")
@@ -1409,6 +1435,7 @@ Link: {mod.get("link", "")}"""
         for folder_name in ["lang", "sound"]:
             source_folder = os.path.join(mod_path, folder_name)
             target_folder = os.path.join(game_dir, folder_name)
+            splash.log(f"Copying {source_folder} to {target_folder}...")
             if os.path.exists(source_folder):
                 try:
                     if os.path.exists(target_folder):
@@ -1420,11 +1447,13 @@ Link: {mod.get("link", "")}"""
                     messagebox.showerror("Copy Failed", f"Could not copy {folder_name}/:\n\n{e}")
             else:
                 print(f"No {folder_name}/ folder in mod.")
+        splash.update_progress(7)
 
         # --- Copy presence DLLs if found ---
         for dll_name in ["NekoPresence.dll", "NekoPresence_x64.dll"]:
             src = os.path.join(mod_path, dll_name)
             dst = os.path.join(game_dir, dll_name)
+            splash.log(f"Copying {src} to {dst}...")
             if os.path.exists(src):
                 try:
                     shutil.copy2(src, dst)
@@ -1432,20 +1461,24 @@ Link: {mod.get("link", "")}"""
                 except Exception as e:
                     print(f"Failed to copy {dll_name}: {e}")
                     messagebox.showerror("Copy Failed", f"Could not copy {dll_name}:\n\n{e}")
+        splash.update_progress(8)
 
         # --- Delete leftover .po translation files ---
         deleted_po_count = 0
         for root, _, files in os.walk(game_dir):
             for file in files:
                 if file.endswith(".po"):
+                    splash.log(f"Deleting {file}...")
                     try:
                         os.remove(os.path.join(root, file))
                         deleted_po_count += 1
                     except Exception as e:
                         print(f"Failed to delete {file}: {e}")
+                    splash.update_progress(9)
         print(f"Deleted {deleted_po_count} .po file(s).")
 
         # --- Launch Game ---
+        splash.log(f"Launching {main_exe}...")
         try:
             print(f"Launching: {main_exe}")
             proc = subprocess.Popen([main_exe], cwd=game_dir)
@@ -1455,12 +1488,15 @@ Link: {mod.get("link", "")}"""
             print(f"Launch failed: {e}")
             messagebox.showerror("Launch Failed", f"Could not launch the game:\n\n{main_exe}\n\nError: {e}")
             return
+        splash.update_progress(10)
 
         # --- Restore backups ---
         for original, backup in backup_files:
             try:
                 shutil.move(backup, original)
                 print(f"Restored {backup} → {original}")
+                splash.log(f"Restoring {original}...")
+                splash.update_progress(11)
             except Exception as e:
                 print(f"Failed to restore {backup}: {e}")
                 messagebox.showerror("Restore Failed", f"Could not restore file:\n\n{backup}\n\nError: {e}")
